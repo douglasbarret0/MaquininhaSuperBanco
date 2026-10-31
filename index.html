@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1c2129">
+<title>Maquininha do Banco</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: terminal de cartão — cartões dos jogadores no topo, painel de operação desliza de baixo como a maquininha */
+:root{
+  --bg:#eef0f3; --surface:#ffffff; --fg:#14171c; --muted:#5d6672; --line:#d6dae0;
+  --term:#1c2129; --term-fg:#e9edf2; --term-muted:#8a95a3; --screen:#c9dcc4; --screen-fg:#17260f;
+  --ok:#1f8a4c; --bad:#c23a2b; --accent:#1f5fbf;
+  --p1:#c8352b; --p2:#1f5fbf; --p3:#1f8a4c; --p4:#d99b13; --p5:#7a3fb5; --p6:#e06b1f;
+  --display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0f1216; --surface:#181c22; --fg:#e9edf2; --muted:#93a0ae; --line:#2a3039;
+  --term:#232a33; --screen:#a9c3a2; --screen-fg:#122009;
+  --ok:#3fbf73; --bad:#ef6a5a; --accent:#5a93e8; color-scheme:dark}}
+*{box-sizing:border-box}
+html{padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--display);font-size:15px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px 120px}
+[hidden]{display:none!important}
+.wrap{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+h1{font-weight:800;font-size:1.35rem;margin:0;letter-spacing:-.01em}
+h2{font-weight:700;font-size:1.05rem;margin:0}
+.hbtns{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+button{font:inherit;cursor:pointer;color:inherit}
+.ghost{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-weight:600;font-size:.88rem}
+button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.roombar{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.roombar .code{font-family:var(--mono);font-weight:700;font-size:1.25rem;letter-spacing:.15em}
+.roombar small{display:block;color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.08em}
+.live{display:inline-flex;align-items:center;gap:6px;font-size:.78rem;color:var(--muted)}
+.live i{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.live.on i{background:var(--ok)}
+
+.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.card{position:relative;border:0;border-radius:14px;padding:12px;text-align:left;color:#fff;background:var(--c);
+  aspect-ratio:1.586;display:flex;flex-direction:column;justify-content:space-between;min-width:0;overflow:hidden;transition:transform .12s}
+.card.dark-text{color:#1d1503}
+.card:active{transform:scale(.98)}
+.card::after{content:"";position:absolute;inset:auto -30% -55% 35%;height:120%;border-radius:50%;background:rgba(255,255,255,.12);pointer-events:none}
+.card.me{box-shadow:0 0 0 3px var(--bg),0 0 0 5px var(--fg)}
+.chip{width:28px;height:21px;border-radius:4px;background:linear-gradient(135deg,#f2d98a,#b8923a);border:1px solid rgba(0,0,0,.15)}
+.card .nm{font-weight:700;font-size:.95rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .bal{font-family:var(--mono);font-weight:700;font-size:clamp(.95rem,4.6vw,1.2rem);font-variant-numeric:tabular-nums;white-space:nowrap}
+.card .lbl{font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;opacity:.85}
+.card.flash{animation:flash .7s}
+@keyframes flash{0%{filter:brightness(1.6)}100%{filter:none}}
+
+.actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.act{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;text-align:left;display:flex;flex-direction:column;gap:2px}
+.act b{font-size:1rem}
+.act span{color:var(--muted);font-size:.8rem}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.logitem{display:flex;justify-content:space-between;gap:10px;font-size:.88rem;padding-block:6px;border-top:1px solid var(--line)}
+.logitem:first-of-type{border-top:0}
+.logitem .d{min-width:0}
+.logitem small{color:var(--muted);display:block}
+.empty{color:var(--muted);font-size:.88rem;margin:0}
+
+.scrim{position:fixed;inset:0;background:rgba(5,8,12,.45);z-index:20}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:21;background:var(--term);color:var(--term-fg);
+  border-radius:20px 20px 0 0;max-height:94%;overflow:auto;
+  padding:14px max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.sheet .in{max-width:520px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+.sheet .logitem{border-color:rgba(255,255,255,.1)}
+.sheet .logitem small,.sheet .empty{color:var(--term-muted)}
+.seg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;background:rgba(255,255,255,.06);padding:4px;border-radius:12px}
+.seg button{background:transparent;border:0;border-radius:9px;padding:8px 2px;font-size:.8rem;font-weight:600;color:var(--term-muted)}
+.seg button[aria-pressed="true"]{background:var(--term-fg);color:var(--term)}
+.who{display:flex;flex-direction:column;gap:6px}
+.who .lab{font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--term-muted)}
+.pills{display:flex;flex-wrap:wrap;gap:6px}
+.pill{border:2px solid transparent;border-radius:999px;padding:6px 12px;font-size:.85rem;font-weight:600;background:rgba(255,255,255,.07);color:var(--term-fg);display:flex;align-items:center;gap:6px}
+.pill i{width:10px;height:10px;border-radius:50%;background:var(--c)}
+.pill[aria-pressed="true"]{border-color:var(--term-fg);background:rgba(255,255,255,.16)}
+.pill:disabled{opacity:.3}
+.screen{background:var(--screen);color:var(--screen-fg);border-radius:10px;padding:10px 12px;font-family:var(--mono);box-shadow:inset 0 2px 6px rgba(0,0,0,.25)}
+.screen .s1{font-size:.75rem;opacity:.75;min-height:1.1em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.screen .s2{font-size:1.9rem;font-weight:700;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden}
+.screen .s3{font-size:.75rem;min-height:1.1em;font-weight:700}
+.keys{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.k{border:0;border-radius:10px;padding:12px 0;font-family:var(--mono);font-weight:700;font-size:1.15rem;background:#3a434f;color:#f1f4f7;box-shadow:0 2px 0 rgba(0,0,0,.35)}
+.k:active{transform:translateY(1px);box-shadow:none}
+.k.mul{background:#4b5563;font-size:.95rem}
+.k.c{background:#d9a514;color:#231a00}
+.k.bk{background:#b8372a}
+.k.ok{background:#1f8a4c;grid-column:4;grid-row:3 / span 2}
+.k.ok:disabled{opacity:.4}
+.close{background:transparent;border:0;color:var(--term-muted);font-size:.85rem;padding:4px}
+
+.setup{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:14px}
+.f{display:flex;flex-direction:column;gap:6px}
+.f label,.f .l{font-size:.78rem;color:var(--muted);font-weight:600}
+input{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%;min-width:0}
+input.codein{font-family:var(--mono);font-size:1.4rem;letter-spacing:.3em;text-transform:uppercase;text-align:center}
+.prow{display:flex;gap:8px;align-items:center}
+.dot{flex:none;width:18px;height:18px;border-radius:50%;background:var(--c)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cnt{display:flex;gap:6px}
+.cnt button{flex:1;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:8px 0;font-weight:700}
+.cnt button[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.primary{background:var(--fg);color:var(--bg);border:0;border-radius:12px;padding:14px;font-weight:700;font-size:1rem}
+.primary:disabled{opacity:.5}
+.hint{font-size:.8rem;color:var(--muted);margin:0}
+.err{color:var(--bad);font-size:.85rem;margin:0;min-height:1em}
+.danger{color:var(--bad)}
+.mepick{display:flex;flex-wrap:wrap;gap:6px}
+.mepick button{border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:6px 12px;font-size:.85rem;font-weight:600;display:flex;align-items:center;gap:6px}
+.mepick button i{width:10px;height:10px;border-radius:50%;background:var(--c)}
+.mepick button[aria-pressed="true"]{border-color:var(--fg);box-shadow:inset 0 0 0 1px var(--fg)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:999px;font-size:.88rem;font-weight:600;z-index:30;max-width:calc(100% - 32px)}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<div class="scrim" id="scrim" hidden></div>
+<div class="sheet" id="sheet" hidden role="dialog" aria-label="Maquininha"><div class="in" id="sheetIn"></div></div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+const SUPABASE_URL="https://tasmjykkfmzivmoaflhb.supabase.co";
+const SUPABASE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRhc21qeWtrZm16aXZtb2FmbGhiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk5MzA2ODgsImV4cCI6MjEwNTUwNjY4OH0.62BUkKqXC6Q5syQWenoMl4_ppztugU3RC0R9tFlCnnQ";
+const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+
+const COLORS=["--p1","--p2","--p3","--p4","--p5","--p6"];
+const DEF_NAMES=["Vermelho","Azul","Verde","Amarelo","Roxo","Laranja"];
+const fmt=n=>(n<0?"-":"")+"M$ "+Math.abs(Number(n)).toLocaleString("pt-BR");
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const ls={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{v==null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){}}};
+
+let G={room:null,cfg:null,players:[],ops:[],live:false,channel:null};
+let setup={n:4,names:DEF_NAMES.slice(),initial:25000000,salary:2000000,err:"",busy:false,code:""};
+let ui={op:"pagar",from:null,to:null,amt:"",msg:"",busy:false,sheet:null};
+let prevBal={};
+
+const P=id=>G.players.find(p=>p.id===id);
+const nm=id=>id==null?"Banco":(P(id)?.name??"?");
+const me=()=>ls.get("sbi-me-"+G.room);
+
+function toast(t){const el=document.getElementById("toast");el.textContent=t;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>el.hidden=true,2600)}
+function errText(e){const m=(e&&(e.message||e.details))||"Erro de conexão";return m.replace(/^.*?: /,"")}
+
+/* ---------- dados ---------- */
+async function loadRoom(code){
+  const [r,p,o]=await Promise.all([
+    sb.from("sbi_rooms").select("*").eq("code",code).maybeSingle(),
+    sb.from("sbi_players").select("*").eq("room",code).order("pos"),
+    sb.from("sbi_ops").select("*").eq("room",code).eq("undone",false).order("id",{ascending:false}).limit(100)
+  ]);
+  if(r.error||p.error||o.error)throw (r.error||p.error||o.error);
+  if(!r.data)return false;
+  const changed=[];
+  p.data.forEach(x=>{if(prevBal[x.id]!==undefined&&prevBal[x.id]!==x.balance)changed.push(x.id);prevBal[x.id]=x.balance});
+  G.cfg=r.data;G.players=p.data;G.ops=o.data;
+  return changed;
+}
+let refreshT=null;
+function scheduleRefresh(){clearTimeout(refreshT);refreshT=setTimeout(refresh,120)}
+async function refresh(){
+  if(!G.room)return;
+  try{const ch=await loadRoom(G.room);render();flash(ch||[])}catch(e){}
+}
+function subscribe(){
+  if(G.channel)sb.removeChannel(G.channel);
+  G.channel=sb.channel("sbi-"+G.room)
+    .on("postgres_changes",{event:"*",schema:"public",table:"sbi_players",filter:"room=eq."+G.room},scheduleRefresh)
+    .on("postgres_changes",{event:"*",schema:"public",table:"sbi_ops",filter:"room=eq."+G.room},scheduleRefresh)
+    .subscribe(s=>{G.live=s==="SUBSCRIBED";const el=document.querySelector(".live");if(el)el.classList.toggle("on",G.live);if(G.live)refresh()});
+}
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh()});
+setInterval(()=>{if(!document.hidden&&G.room&&!G.live)refresh()},8000);
+
+async function enterRoom(code){
+  code=code.toUpperCase().trim();
+  const found=await loadRoom(code);
+  if(found===false)throw new Error("Partida "+code+" não encontrada");
+  G.room=code;ls.set("sbi-room",code);
+  if(location.hash!=="#"+code)history.replaceState(null,"","#"+code);
+  subscribe();render();
+}
+function leaveRoom(){
+  if(G.channel)sb.removeChannel(G.channel);
+  G={room:null,cfg:null,players:[],ops:[],live:false,channel:null};prevBal={};
+  ls.set("sbi-room",null);history.replaceState(null,"",location.pathname);render();
+}
+
+/* ---------- tela inicial ---------- */
+function startHTML(){
+  const n=setup.n;
+  return `<header><h1>Maquininha</h1></header>
+  <div class="setup">
+    <h2>Entrar numa partida</h2>
+    <div class="f"><label for="code">Código da partida</label><input id="code" class="codein" maxlength="6" autocomplete="off" autocapitalize="characters" value="${esc(setup.code)}" placeholder="AB12"></div>
+    <button class="primary" id="bJoin">Entrar</button>
+  </div>
+  <div class="setup">
+    <h2>Criar partida nova</h2>
+    <div class="f"><span class="l">Número de jogadores</span><div class="cnt">${[2,3,4,5,6].map(i=>`<button data-n="${i}" aria-pressed="${i===n}">${i}</button>`).join("")}</div></div>
+    <div class="f"><span class="l">Nomes</span>${Array.from({length:n},(_,i)=>`<div class="prow"><span class="dot" style="--c:var(${COLORS[i]})"></span><input id="name${i}" aria-label="Jogador ${i+1}" value="${esc(setup.names[i]||DEF_NAMES[i])}" maxlength="16"></div>`).join("")}</div>
+    <div class="two">
+      <div class="f"><label for="ini">Saldo inicial (M$)</label><input id="ini" class="num" inputmode="numeric" value="${setup.initial}"></div>
+      <div class="f"><label for="sal">Ponto de partida (M$)</label><input id="sal" class="num" inputmode="numeric" value="${setup.salary}"></div>
+    </div>
+    <p class="hint">Confira os valores no manual da sua caixa. Depois de criar, mande o código para os outros jogadores.</p>
+    <button class="primary" id="bStart" ${setup.busy?"disabled":""}>${setup.busy?"Criando…":"Criar partida"}</button>
+  </div>
+  <p class="err" id="err">${esc(setup.err)}</p>`;
+}
+function bindStart(){
+  const keep=()=>{for(let i=0;i<setup.n;i++){const el=document.getElementById("name"+i);if(el)setup.names[i]=el.value}
+    setup.initial=num(document.getElementById("ini").value);setup.salary=num(document.getElementById("sal").value);setup.code=document.getElementById("code").value};
+  const num=v=>parseInt(String(v).replace(/\D/g,""),10)||0;
+  document.querySelectorAll("[data-n]").forEach(b=>b.onclick=()=>{keep();setup.n=+b.dataset.n;render()});
+  document.getElementById("bJoin").onclick=async()=>{
+    keep();setup.err="";
+    if(setup.code.trim().length<4){setup.err="Digite o código de 4 letras";render();return}
+    try{await enterRoom(setup.code)}catch(e){setup.err=errText(e);render()}
+  };
+  document.getElementById("code").onkeydown=e=>{if(e.key==="Enter")document.getElementById("bJoin").click()};
+  document.getElementById("bStart").onclick=async()=>{
+    keep();setup.err="";setup.busy=true;render();
+    const names=setup.names.slice(0,setup.n).map((s,i)=>s.trim()||DEF_NAMES[i]);
+    const ABC="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    for(let t=0;t<5;t++){
+      const code=Array.from({length:4},()=>ABC[Math.floor(Math.random()*ABC.length)]).join("");
+      const {error}=await sb.rpc("sbi_create_room",{p_code:code,p_initial:setup.initial,p_salary:setup.salary,p_names:names,p_colors:COLORS.slice(0,setup.n)});
+      if(!error){setup.busy=false;try{await enterRoom(code);toast("Partida "+code+" criada")}catch(e){setup.err=errText(e);render()}return}
+      if(!/duplicate|unique/i.test(error.message)){setup.busy=false;setup.err=errText(error);render();return}
+    }
+    setup.busy=false;setup.err="Não consegui gerar um código. Tente de novo.";render();
+  };
+}
+
+/* ---------- tela da partida ---------- */
+function render(){
+  const app=document.getElementById("app");
+  if(!G.room){app.innerHTML=startHTML();bindStart();return}
+  const mine=me();
+  const lastOps=G.ops.slice(0,5);
+  app.innerHTML=`
+  <header><h1>Maquininha</h1>
+    <div class="hbtns"><button class="ghost" id="bHist">Histórico</button><button class="ghost" id="bLeave">Sair</button></div></header>
+  <div class="roombar">
+    <div><small>Código da partida</small><span class="code">${esc(G.room)}</span></div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+      <span class="live ${G.live?"on":""}"><i></i>${G.live?"ao vivo":"conectando"}</span>
+      <button class="ghost" id="bShare">Copiar link</button></div>
+  </div>
+  <div class="cards">${G.players.map(p=>`
+    <button class="card ${p.color==="--p4"?"dark-text":""} ${p.id===mine?"me":""}" style="--c:var(${esc(p.color)})" data-card="${p.id}">
+      <div class="row"><span class="chip"></span><span class="lbl">${p.id===mine?"Você":"Super Banco"}</span></div>
+      <div><div class="nm">${esc(p.name)}</div><div class="bal">${fmt(p.balance)}</div></div>
+    </button>`).join("")}</div>
+  <div class="actions">
+    <button class="act" data-op="pagar"><b>Pagar ao banco</b><span>compras, impostos, multas</span></button>
+    <button class="act" data-op="receber"><b>Receber do banco</b><span>prêmios, vendas, hipoteca</span></button>
+    <button class="act" data-op="transferir"><b>Entre jogadores</b><span>aluguel, negociações</span></button>
+    <button class="act" data-op="partida"><b>Ponto de partida</b><span>recebe ${fmt(G.cfg.salary)}</span></button>
+  </div>
+  <section class="panel">
+    <div class="row"><h2>Últimas operações</h2>${G.ops.length?`<button class="ghost" id="bUndo">Desfazer última</button>`:""}</div>
+    ${lastOps.length?lastOps.map(logRow).join(""):`<p class="empty">Nenhuma operação ainda. Toque em um cartão ou em uma ação acima.</p>`}
+  </section>
+  <section class="panel">
+    <h2>Este celular é de</h2>
+    <div class="mepick">${G.players.map(p=>`<button data-me="${p.id}" style="--c:var(${esc(p.color)})" aria-pressed="${p.id===mine}"><i></i>${esc(p.name)}</button>`).join("")}</div>
+    <p class="hint">Só destaca o seu cartão e já deixa você selecionado ao pagar. Qualquer celular pode lançar operações.</p>
+  </section>`;
+  app.querySelectorAll("[data-card]").forEach(b=>b.onclick=()=>openSheet(ui.op,b.dataset.card));
+  app.querySelectorAll("[data-op]").forEach(b=>b.onclick=()=>openSheet(b.dataset.op));
+  app.querySelectorAll("[data-me]").forEach(b=>b.onclick=()=>{ls.set("sbi-me-"+G.room,b.dataset.me===mine?null:b.dataset.me);render()});
+  document.getElementById("bHist").onclick=openHist;
+  const bl=document.getElementById("bLeave");
+  bl.onclick=()=>{if(bl.dataset.c){leaveRoom();return}bl.dataset.c=1;bl.textContent="Confirmar saída?";bl.classList.add("danger");setTimeout(()=>{if(bl.isConnected){delete bl.dataset.c;bl.textContent="Sair";bl.classList.remove("danger")}},3500)};
+  document.getElementById("bShare").onclick=async()=>{
+    const url=location.origin+location.pathname+"#"+G.room;
+    try{await navigator.clipboard.writeText(url);toast("Link copiado")}catch(e){toast(url)}
+  };
+  const u=document.getElementById("bUndo");if(u)u.onclick=undo;
+  if(ui.sheet==="op")renderSheet(); else if(ui.sheet==="hist")openHist();
+}
+function flash(ids){ids.forEach(id=>{const el=document.querySelector(`[data-card="${id}"]`);if(el){el.classList.remove("flash");void el.offsetWidth;el.classList.add("flash")}})}
+function describe(o){
+  if(o.type==="partida")return `${nm(o.to_id)} passou pela partida`;
+  return `${nm(o.from_id)} → ${nm(o.to_id)}`;
+}
+function logRow(o){
+  const t=new Date(o.created_at).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
+  return `<div class="logitem"><div class="d">${esc(describe(o))}<small>${t}</small></div><div class="num">${fmt(o.amount)}</div></div>`;
+}
+async function undo(){
+  const {error}=await sb.rpc("sbi_undo",{p_room:G.room});
+  if(error)toast(errText(error));else{toast("Operação desfeita");refresh()}
+}
+
+/* ---------- maquininha ---------- */
+function openSheet(op,pid){
+  ui.op=op;ui.amt="";ui.msg="";ui.from=null;ui.to=null;ui.sheet="op";
+  if(!pid&&(op==="pagar"||op==="transferir"))pid=me();
+  if(pid){ if(op==="pagar"||op==="transferir")ui.from=pid; else ui.to=pid; }
+  if(op==="partida")ui.amt=String(G.cfg.salary);
+  show();renderSheet();
+}
+function show(){document.getElementById("sheet").hidden=false;document.getElementById("scrim").hidden=false}
+function hide(){ui.sheet=null;document.getElementById("sheet").hidden=true;document.getElementById("scrim").hidden=true}
+document.getElementById("scrim").onclick=hide;
+
+function pills(slot){
+  const sel=ui[slot], other=slot==="from"?ui.to:ui.from;
+  return `<div class="pills">${G.players.map(p=>`<button class="pill" style="--c:var(${esc(p.color)})" data-slot="${slot}" data-p="${p.id}" aria-pressed="${sel===p.id}" ${other===p.id?"disabled":""}><i></i>${esc(p.name)}</button>`).join("")}</div>`;
+}
+function renderSheet(){
+  const op=ui.op, amt=parseInt(ui.amt||"0",10);
+  const needFrom=op==="pagar"||op==="transferir", needTo=op!=="pagar";
+  const from=needFrom?ui.from:null, to=needTo?ui.to:null;
+  const okFrom=!needFrom||!!ui.from, okTo=!needTo||!!ui.to;
+  let line=okFrom&&okTo?`${nm(from)} → ${nm(to)}`:(!okFrom?"Escolha quem paga":"Escolha quem recebe");
+  const after=from?P(from).balance-amt:null;
+  const ready=okFrom&&okTo&&amt>0&&!ui.busy;
+  let status=ui.msg;
+  if(!status&&after!==null&&amt>0)status=after<0?`Saldo insuficiente (faltam ${fmt(-after)})`:`Saldo após: ${fmt(after)}`;
+  const opBtn=(k,t)=>`<button data-setop="${k}" aria-pressed="${op===k}">${t}</button>`;
+  const k=d=>`<button class="k" data-k="${d}">${d}</button>`;
+  document.getElementById("sheetIn").innerHTML=`
+    <div class="row"><h2>Nova operação</h2><button class="close" id="bClose">Fechar</button></div>
+    <div class="seg">${opBtn("pagar","Pagar")}${opBtn("receber","Receber")}${opBtn("transferir","Transferir")}${opBtn("partida","Partida")}</div>
+    ${needFrom?`<div class="who"><span class="lab">Quem paga</span>${pills("from")}</div>`:""}
+    ${needTo?`<div class="who"><span class="lab">Quem recebe</span>${pills("to")}</div>`:""}
+    <div class="screen" aria-live="polite"><div class="s1">${esc(line)}</div><div class="s2">${fmt(amt)}</div><div class="s3">${esc(status)}</div></div>
+    <div class="keys">
+      ${["7","8","9"].map(k).join("")}<button class="k bk" data-k="del" aria-label="Apagar">⌫</button>
+      ${["4","5","6"].map(k).join("")}<button class="k c" data-k="clr">C</button>
+      ${["1","2","3"].map(k).join("")}<button class="k ok" id="bOk" ${ready?"":"disabled"}>${ui.busy?"…":"OK"}</button>
+      <button class="k mul" data-k="000">000</button>${k("0")}<button class="k mul" data-k="mil">mil</button>
+    </div>`;
+  const si=document.getElementById("sheetIn");
+  si.querySelector("#bClose").onclick=hide;
+  si.querySelectorAll("[data-setop]").forEach(b=>b.onclick=()=>openSheet(b.dataset.setop,ui.from||ui.to));
+  si.querySelectorAll("[data-slot]").forEach(b=>b.onclick=()=>{ui[b.dataset.slot]=b.dataset.p;ui.msg="";renderSheet()});
+  si.querySelectorAll("[data-k]").forEach(b=>b.onclick=()=>press(b.dataset.k));
+  si.querySelector("#bOk").onclick=()=>confirmOp(from,to,amt);
+}
+function press(key){
+  ui.msg="";
+  if(key==="del")ui.amt=ui.amt.slice(0,-1);
+  else if(key==="clr")ui.amt="";
+  else if(key==="000")ui.amt=ui.amt?ui.amt+"000":"";
+  else if(key==="mil")ui.amt=ui.amt?ui.amt+"000":"1000";
+  else ui.amt=(ui.amt+key).replace(/^0+/,"");
+  if(ui.amt.length>12)ui.amt=ui.amt.slice(0,12);
+  renderSheet();
+}
+async function confirmOp(from,to,amt){
+  if(ui.busy)return;
+  if(from&&P(from).balance<amt){ui.msg=`Saldo insuficiente: ${nm(from)} tem ${fmt(P(from).balance)}`;renderSheet();return}
+  ui.busy=true;renderSheet();
+  const {error}=await sb.rpc("sbi_op",{p_room:G.room,p_type:ui.op,p_from:from,p_to:to,p_amount:amt});
+  ui.busy=false;
+  if(error){ui.msg=errText(error);renderSheet();return}
+  hide();toast("Feito: "+fmt(amt));refresh();
+}
+
+/* ---------- histórico ---------- */
+function openHist(){
+  ui.sheet="hist";show();
+  const si=document.getElementById("sheetIn");
+  si.innerHTML=`<div class="row"><h2>Histórico (${G.ops.length})</h2><button class="close" id="bClose">Fechar</button></div>
+    ${G.ops.length?`<button class="pill" id="bU2" style="align-self:flex-start">Desfazer última operação</button>`:""}
+    <div style="display:flex;flex-direction:column">${G.ops.length?G.ops.map(logRow).join(""):`<p class="empty">Sem operações.</p>`}</div>`;
+  si.querySelector("#bClose").onclick=hide;
+  const u=si.querySelector("#bU2");if(u)u.onclick=undo;
+}
+
+/* ---------- início ---------- */
+(async()=>{
+  const code=(location.hash.slice(1)||ls.get("sbi-room")||"").toUpperCase();
+  if(code){try{await enterRoom(code);return}catch(e){setup.code=code;setup.err=errText(e)}}
+  render();
+})();
+window.addEventListener("hashchange",()=>{const c=location.hash.slice(1).toUpperCase();if(c&&c!==G.room)enterRoom(c).catch(e=>toast(errText(e)))});
+</script>
+</body>
+</html>
