@@ -30,6 +30,8 @@ create table if not exists public.sbi_ops (
   created_at timestamptz not null default now()
 );
 create index if not exists sbi_ops_room_idx on public.sbi_ops(room, id desc);
+create index if not exists sbi_ops_from_idx on public.sbi_ops(from_id);
+create index if not exists sbi_ops_to_idx on public.sbi_ops(to_id);
 
 alter table public.sbi_rooms   enable row level security;
 alter table public.sbi_players enable row level security;
